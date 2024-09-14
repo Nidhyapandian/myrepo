@@ -1,0 +1,47 @@
+
+pipeline {
+   tools {
+        maven 'Maven3'
+    }
+    agent any
+    environment {
+        registry = "public.ecr.aws/u0l6f6d9/eksrepo"
+    }
+   
+    stages {
+        stage('Cloning Git') {
+            steps {
+                checkout([$class: 'GitSCM', branches: [[name: '*/main']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: '', url: '']]])     
+            }
+        }
+      stage ('Build') {
+          steps {
+            sh 'mvn clean install'           
+            }
+      }
+    // Building Docker images
+    stage('Building image') {
+      steps{
+        script {
+          dockerImage = docker.build registry 
+        }
+      }
+    }
+   
+    // Uploading Docker images into AWS ECR
+    stage('Pushing to ECR') {
+     steps{  
+         script {
+                sh 'aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws/u0l6f6d9'
+                sh 'docker push public.ecr.aws/u0l6f6d9/eksrepo'
+         }
+        }
+      }
+
+       stage('K8S Deploy') {
+            sh 'kubectl apply -f  eks-deploy-k8s.yaml'
+               }
+       }
+    }
+
+
